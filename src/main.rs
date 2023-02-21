@@ -10,14 +10,21 @@ use std::io::Error;
 use std::process::exit;
 
 mod word;
-
 use word::Word;
 
-fn read_dictionary() -> Result<Vec<String>, Error> {
-    Ok(fs::read_to_string("/usr/share/dict/british-english")?
+const BRITISH_ENGLISH_DICTIONARY_FILE: &'static str = "/usr/share/dict/british-english";
+const RESERVED_WORDS_FILE: &'static str = "/usr/share/dict/wcheck-reserved-words";
+
+fn read_dictionary_file(dictionary: &mut Vec<String>, filename: &str) -> Result<(), Error> {
+    let mut file_contents: Vec<String> = fs::read_to_string(filename)?
         .lines()
-        .map(ToOwned::to_owned)
-        .collect())
+        .map(|w| w.to_lowercase())
+        .collect();
+
+    dictionary.append(&mut file_contents);
+    dictionary.sort();
+
+    Ok(())
 }
 
 fn read_words_from_file(filename: &String) -> Result<Vec<Word>, Error> {
@@ -39,7 +46,7 @@ fn read_words_from_file(filename: &String) -> Result<Vec<Word>, Error> {
                 .map(|w| {
                     let word = WORD_MATCH_RE
                         .find(w)
-                        .expect("Missing word from match")
+                        .expect("Missing word after match")
                         .as_str()
                         .to_string();
 
@@ -56,14 +63,18 @@ fn read_words_from_file(filename: &String) -> Result<Vec<Word>, Error> {
 }
 
 fn main() {
-    let dictionary;
-    match read_dictionary() {
-        Ok(d) => dictionary = d,
-        Err(e) => {
-            eprintln!("Failed to read dictionary: {}", e);
-            exit(-1);
-        }
-    };
+    let mut dictionary: Vec<String> = Vec::new();
+    if let Err(e) = read_dictionary_file(&mut dictionary, BRITISH_ENGLISH_DICTIONARY_FILE) {
+        eprintln!("Failed to read british words dictionary: {}", e);
+        eprintln!("Is the dictionary installed?");
+        exit(-1);
+    }
+
+    if let Err(e) = read_dictionary_file(&mut dictionary, RESERVED_WORDS_FILE) {
+        eprintln!("Failed to read reserved words dictionary: {}", e);
+        eprintln!("Be sure to place 'wcheck-reserved-words' into /usr/share/dict");
+        exit(-1);
+    }
 
     let mut misspelled_word_count: i32 = 0;
     for file in env::args().skip(1) {
