@@ -46,14 +46,18 @@ impl Word {
     }
 
     pub fn generate_baseline_entry(&self) -> String {
-        // TODO: Handle this error
-        let cwd = current_dir().expect("Get the current directory");
-        let relative_file_path = match self.file.is_relative() {
-            true => self.file.as_path(),
-            false => self.file.strip_prefix(cwd).unwrap(),
-        };
+        format!("{}: {}", self.get_relative_file_path().display(), self.word)
+    }
 
-        format!("{}: {}", relative_file_path.display(), self.word)
+    pub fn get_relative_file_path(&self) -> PathBuf {
+        return match self.file.is_relative() {
+            true => self.file.clone(),
+            false => {
+                // TODO: Handle these errors
+                let cwd = current_dir().expect("Get the current directory");
+                PathBuf::from(self.file.strip_prefix(cwd).unwrap())
+            }
+        };
     }
 
     fn is_dictionary_word(&self, dictionary: &Vec<String>, word: &String) -> bool {
