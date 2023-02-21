@@ -1,8 +1,13 @@
+use std::env::current_dir;
+use std::path::PathBuf;
+
 use lazy_static::lazy_static;
 use regex::Regex;
 
+#[derive(Clone)]
 pub struct Word {
     pub word: String,
+    pub file: PathBuf,
     pub line_nr: u32,
 }
 
@@ -38,6 +43,17 @@ impl Word {
         }
 
         SNAKE_CASE.is_match(&self.word)
+    }
+
+    pub fn generate_baseline_entry(&self) -> String {
+        // TODO: Handle this error
+        let cwd = current_dir().expect("Get the current directory");
+        let relative_file_path = match self.file.is_relative() {
+            true => self.file.as_path(),
+            false => self.file.strip_prefix(cwd).unwrap(),
+        };
+
+        format!("{}: {}", relative_file_path.display(), self.word)
     }
 
     fn is_dictionary_word(&self, dictionary: &Vec<String>, word: &String) -> bool {

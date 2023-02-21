@@ -1,12 +1,14 @@
+extern crate clap;
 extern crate lazy_static;
 extern crate regex;
 
+use clap::Parser;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use std::env;
-use std::fs;
-use std::io::Error;
+use std::fs::{self, OpenOptions};
+use std::io::{Error, Write};
+use std::path::PathBuf;
 use std::process::exit;
 
 mod word;
@@ -21,13 +23,17 @@ fn read_dictionary_file(dictionary: &mut Vec<String>, filename: &str) -> Result<
         .map(|w| w.to_lowercase())
         .collect();
 
-    dictionary.append(&mut file_contents);
-    dictionary.sort();
+    if dictionary.is_empty() {
+        file_contents.clone_into(dictionary);
+    } else {
+        dictionary.append(&mut file_contents);
+        dictionary.sort();
+    }
 
     Ok(())
 }
 
-fn read_words_from_file(filename: &String) -> Result<Vec<Word>, Error> {
+fn read_words_from_file(filename: &PathBuf) -> Result<Vec<Word>, Error> {
     lazy_static! {
         static ref WORD_MATCH_RE: Regex = Regex::new("[a-zA-Z][a-zA-Z_\']*[a-zA-Z]").unwrap();
     }
@@ -52,6 +58,7 @@ fn read_words_from_file(filename: &String) -> Result<Vec<Word>, Error> {
 
                     Word {
                         word,
+                        file: filename.to_path_buf(),
                         line_nr: (idx + 1) as u32,
                     }
                 })
@@ -62,7 +69,36 @@ fn read_words_from_file(filename: &String) -> Result<Vec<Word>, Error> {
     Ok(word_list)
 }
 
+/// Generates a baseline file for all found spelling mistakes
+/// If a baseline file exists, append the new spelling mistakes
+fn generate_baseline(misspelled_words: &Vec<Word>) -> Result<(), Error> {
+    let mut baseline_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(".wcheck-baseline")?;
+
+    for word in misspelled_words {
+        writeln!(baseline_file, "{}", word.generate_baseline_entry())?
+    }
+
+    Ok(())
+}
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Generates a baseline file of spelling mistakes to be ignored in future checks
+    #[arg(long = "baseline")]
+    generate_baseline: bool,
+
+    /// Files to be spell checked
+    #[arg(required = true)]
+    files: Vec<PathBuf>,
+}
+
 fn main() {
+    let args = Args::parse();
+
     let mut dictionary: Vec<String> = Vec::new();
     if let Err(e) = read_dictionary_file(&mut dictionary, BRITISH_ENGLISH_DICTIONARY_FILE) {
         eprintln!("Failed to read british words dictionary: {}", e);
@@ -76,8 +112,8 @@ fn main() {
         exit(-1);
     }
 
-    let mut misspelled_word_count: i32 = 0;
-    for file in env::args().skip(1) {
+    let mut all_misspelled_words: Vec<Word> = Vec::new();
+    for file in args.files {
         match read_words_from_file(&file) {
             Ok(file_words) => {
                 for word in file_words {
@@ -89,26 +125,35 @@ fn main() {
                                 if is_multiple_words {
                                     println!(
                                         "Misspelled word in {}:{}: '\x1b[91m{}\x1b[0m' within '\x1b[93m{}\x1b[0m'",
-                                        file, word.line_nr, m_word, word.word
+                                        file.display(), word.line_nr, m_word, word.word
                                     );
                                 } else {
                                     println!(
                                         "Misspelled word in {}:{}: '\x1b[91m{}\x1b[0m'",
-                                        file, word.line_nr, m_word
+                                        file.display(),
+                                        word.line_nr,
+                                        m_word
                                     );
                                 }
-                                misspelled_word_count += 1;
+                                all_misspelled_words.push(word.clone());
                             }
                         }
                     }
                 }
             }
             Err(e) => {
-                eprintln!("Failed to read file {}: {}", file, e);
+                eprintln!("Failed to read file {}: {}", file.display(), e);
                 exit(-2);
             }
         }
     }
 
-    exit(misspelled_word_count);
+    if args.generate_baseline {
+        println!("Generating baseline file");
+        if let Err(e) = generate_baseline(&all_misspelled_words) {
+            eprintln!("Failed to generate baseline file: {}", e);
+        }
+    }
+
+    exit(all_misspelled_words.len() as i32);
 }

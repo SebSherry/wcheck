@@ -36,8 +36,8 @@ impl
 instanceof
 insteadof
 isset
-iterable
 iter
+iterable
 math
 mut
 namespace
@@ -72,5 +72,7 @@ unsized
 untaint
 uri
 vec
+whitespace
+writeln
 xoffset
 yoffset
