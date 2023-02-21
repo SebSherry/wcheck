@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 
 use std::collections::HashMap;
-use std::fs::{self, OpenOptions};
+use std::fs::{self, read_dir, OpenOptions};
 use std::io::{Error, Write};
 use std::path::{Path, PathBuf};
 use std::process::exit;
@@ -131,6 +131,35 @@ fn read_baseline_file() -> Result<HashMap<String, Vec<String>>, Error> {
     Ok(baseline)
 }
 
+fn check_spelling_for_file(
+    dictionary: &Vec<String>,
+    baseline: &HashMap<String, Vec<String>>,
+    all_misspelled_words: &mut Vec<Word>,
+    file: &PathBuf,
+    recursive: bool,
+) -> Result<(), Error> {
+    // We if/else here because trying to read from a
+    // directory will throw the correct error for us
+    if file.is_dir() && recursive {
+        for sub_file in read_dir(file)? {
+            check_spelling_for_file(
+                dictionary,
+                baseline,
+                all_misspelled_words,
+                &sub_file?.path(),
+                recursive,
+            )?;
+        }
+    } else {
+        let file_words = read_words_from_file(&file)?;
+        let mut misspelled_words =
+            check_spelling_for_file_contents(&dictionary, &baseline, &file_words);
+        all_misspelled_words.append(&mut misspelled_words);
+    }
+
+    Ok(())
+}
+
 fn check_spelling_for_file_contents(
     dictionary: &Vec<String>,
     baseline: &HashMap<String, Vec<String>>,
@@ -175,6 +204,10 @@ struct Args {
     #[arg(long = "baseline")]
     generate_baseline: bool,
 
+    /// Recursively search directories for files to check
+    #[arg(short = 'r', long = "recursive")]
+    recursive: bool,
+
     /// Files to be spell checked
     #[arg(required = true)]
     files: Vec<PathBuf>,
@@ -207,16 +240,15 @@ fn main() {
 
     let mut all_misspelled_words: Vec<Word> = Vec::new();
     for file in args.files {
-        match read_words_from_file(&file) {
-            Ok(file_words) => {
-                let mut misspelled_words =
-                    check_spelling_for_file_contents(&dictionary, &baseline, &file_words);
-                all_misspelled_words.append(&mut misspelled_words);
-            }
-            Err(e) => {
-                eprintln!("Failed to read file {}: {}", file.display(), e);
-                exit(-2);
-            }
+        if let Err(e) = check_spelling_for_file(
+            &dictionary,
+            &baseline,
+            &mut all_misspelled_words,
+            &file,
+            args.recursive,
+        ) {
+            eprintln!("Failed to read file {}: {}", file.display(), e);
+            exit(-2);
         }
     }
 

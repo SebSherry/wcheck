@@ -1,3 +1,14 @@
+src/word/test.rs: assert_eq
+src/word/test.rs: adsf
+src/word/test.rs: teamWorkWrkTeam
+src/word/test.rs: teamWorkWrkTem
+src/word/test.rs: team_work_wrk_team
+src/word/test.rs: team_work_wrk_tem
+src/word/mod.rs: PathBuf
+src/word/mod.rs: TODO
+src/word/mod.rs: cwd
+src/word/mod.rs: idx
+src/word/mod.rs: cfg
 src/main.rs: PathBuf
 src/main.rs: usr
 src/main.rs: wcheck
@@ -6,8 +17,3 @@ src/main.rs: idx
 src/main.rs: Args
 src/main.rs: arg
 src/main.rs: args
-src/word/mod.rs: PathBuf
-src/word/mod.rs: TODO
-src/word/mod.rs: cwd
-src/word/mod.rs: idx
-src/word/mod.rs: cfg
