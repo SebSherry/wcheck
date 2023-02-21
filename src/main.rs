@@ -138,6 +138,11 @@ fn check_spelling_for_file(
     file: &PathBuf,
     recursive: bool,
 ) -> Result<(), Error> {
+    // Skip baseline file
+    if file.file_name().unwrap() == BASELINE_FILE {
+        return Ok(());
+    }
+
     // We if/else here because trying to read from a
     // directory will throw the correct error for us
     if file.is_dir() && recursive {

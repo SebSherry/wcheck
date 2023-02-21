@@ -17,3 +17,11 @@ src/main.rs: idx
 src/main.rs: Args
 src/main.rs: arg
 src/main.rs: args
+README.md: wcheck
+README.md: wbritish
+README.md: pacman
+README.md: xbps
+README.md: https
+README.md: cp
+README.md: usr
+README.md: sudo
