@@ -6,13 +6,17 @@ wcheck is a spell checker with programmers in mind. It is designed to work on so
 
 ### Prerequisites 
 
-You will a rust compiler and the British English word list installed (American English support coming soon).
+You will a rust compiler and the British or American English word list installed.
 
 Instructions for installing rust can be found [here](https://www.rust-lang.org/tools/install)
 
-The British should be installed by default on most Linux systems. However installation can be done with the following:
+The word lists should be installed by default on most Linux systems. However installation can be done with the following:
 
 Debian/Ubuntu: 
+```Shell
+apt install wbritish
+```
+Note if you would like to use the American word list, you need to install `wamerican`
 ```Shell
 apt install wbritish
 ```
@@ -43,16 +47,43 @@ Note you may need sudo privileges to copy `wcheck-reserved-words` to `/usr/share
 
 ## Usage
 ```Shell
-Usage: wcheck [OPTIONS] <FILES>... 
+wcheck file-to-spell-check
+```
 
-Arguments:  
-  <FILES>...  Files to be spell checked
+`wcheck` supports multiple files like so:
+```Shell
+wcheck file1 file2 ...
+```
 
-Options:
-      --baseline   Generates a baseline file of spelling mistakes to be ignored in future checks   
-  -r, --recursive  Recursively search directories for files to check   
-  -h, --help       Print help   
-  -V, --version    Print version
+Traverse directories:
+```Shell
+wcheck -r dir 
+```
+
+Use the American word list:
+```Shell
+wcheck -A <files> 
+```
+or 
+```Shell
+wcheck --american <files> 
+```
+
+### Baseline files
+When using `wcheck` in a linting context you may wish to create baseline file to ignore certain "intentional mistakes" (such as `idx` as an index variable).
+You can generate a baseline file like so: 
+```Shell
+wcheck --baseline <files> 
+```
+
+This generates `.wcheck-baseline` in the current directory. You can specify the name and location of the baseline file like so:
+```Shell
+wcheck --baseline --baseline-file my-baseline-file <files> 
+```
+
+`---baseline-file` also works when running a check:
+```Shell
+wcheck --baseline-file my-baseline-file <files> 
 ```
 
 ## License

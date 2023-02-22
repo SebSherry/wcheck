@@ -49,13 +49,19 @@ impl Word {
         format!("{}: {}", self.get_relative_file_path().display(), self.word)
     }
 
+    /// Returns the relative path of a file if the current file falls under the current working directory
+    /// If it is outside the working directory and not already a relative path, the absolute path is returned instead
     pub fn get_relative_file_path(&self) -> PathBuf {
         return match self.file.is_relative() {
             true => self.file.clone(),
             false => {
                 // TODO: Handle these errors
                 let cwd = current_dir().expect("Get the current directory");
-                PathBuf::from(self.file.strip_prefix(cwd).unwrap())
+                if self.file.starts_with(&cwd) {
+                    PathBuf::from(self.file.strip_prefix(cwd).unwrap())
+                } else {
+                    self.file.clone()
+                }
             }
         };
     }

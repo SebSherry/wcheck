@@ -25,3 +25,6 @@ README.md: https
 README.md: cp
 README.md: usr
 README.md: sudo
+Cargo.toml: wcheck
+Cargo.toml: https
+src/word/test.rs: PathBuf

@@ -15,6 +15,7 @@ use std::process::exit;
 mod word;
 use word::Word;
 
+const AMERICAN_ENGLISH_DICTIONARY_FILE: &'static str = "/usr/share/dict/american-english";
 const BRITISH_ENGLISH_DICTIONARY_FILE: &'static str = "/usr/share/dict/british-english";
 const RESERVED_WORDS_FILE: &'static str = "/usr/share/dict/wcheck-reserved-words";
 const DEFAULT_BASELINE_FILE: &'static str = ".wcheck-baseline";
@@ -219,6 +220,10 @@ struct Args {
     #[arg(short = 'r', long = "recursive")]
     recursive: bool,
 
+    /// Use the american word list
+    #[arg(short = 'A', long = "american")]
+    american: bool,
+
     /// Files to be spell checked
     #[arg(required = true)]
     files: Vec<PathBuf>,
@@ -228,8 +233,14 @@ fn main() {
     let args = Args::parse();
 
     let mut dictionary: Vec<String> = Vec::new();
-    if let Err(e) = read_dictionary_file(&mut dictionary, BRITISH_ENGLISH_DICTIONARY_FILE) {
-        eprintln!("Failed to read british words dictionary: {}", e);
+
+    let word_list_file = match args.american {
+        true => AMERICAN_ENGLISH_DICTIONARY_FILE,
+        false => BRITISH_ENGLISH_DICTIONARY_FILE,
+    };
+
+    if let Err(e) = read_dictionary_file(&mut dictionary, word_list_file) {
+        eprintln!("Failed to read word list: {}", e);
         eprintln!("Is the dictionary installed?");
         exit(-1);
     }
