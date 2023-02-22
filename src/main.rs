@@ -17,7 +17,7 @@ use word::Word;
 
 const BRITISH_ENGLISH_DICTIONARY_FILE: &'static str = "/usr/share/dict/british-english";
 const RESERVED_WORDS_FILE: &'static str = "/usr/share/dict/wcheck-reserved-words";
-const BASELINE_FILE: &'static str = ".wcheck-baseline";
+const DEFAULT_BASELINE_FILE: &'static str = ".wcheck-baseline";
 
 fn read_dictionary_file(dictionary: &mut Vec<String>, filename: &str) -> Result<(), Error> {
     let mut file_contents: Vec<String> = fs::read_to_string(filename)?
@@ -73,12 +73,12 @@ fn read_words_from_file(filename: &PathBuf) -> Result<Vec<Word>, Error> {
 
 /// Generates a baseline file for all found spelling mistakes
 /// If a baseline file exists, append the new spelling mistakes
-fn generate_baseline(misspelled_words: &Vec<Word>) -> Result<(), Error> {
+fn generate_baseline(baseline_file: &String, misspelled_words: &Vec<Word>) -> Result<(), Error> {
     let mut baseline: HashMap<String, Vec<String>> = HashMap::new();
     let mut baseline_file = OpenOptions::new()
         .create(true)
         .append(true)
-        .open(BASELINE_FILE)?;
+        .open(baseline_file)?;
 
     for word in misspelled_words {
         let filename = word.get_relative_file_path().to_string_lossy().to_string();
@@ -105,11 +105,11 @@ fn generate_baseline(misspelled_words: &Vec<Word>) -> Result<(), Error> {
     Ok(())
 }
 
-fn read_baseline_file() -> Result<HashMap<String, Vec<String>>, Error> {
+fn read_baseline_file(baseline_file: &String) -> Result<HashMap<String, Vec<String>>, Error> {
     let mut baseline: HashMap<String, Vec<String>> = HashMap::new();
 
-    if Path::new(BASELINE_FILE).exists() {
-        for line in fs::read_to_string(BASELINE_FILE)?.lines() {
+    if Path::new(baseline_file).exists() {
+        for line in fs::read_to_string(baseline_file)?.lines() {
             let line_split = line.split(": ").collect::<Vec<&str>>();
             let filename = line_split.get(0).unwrap().to_string();
             let word = line_split.get(1).unwrap().to_string();
@@ -134,12 +134,13 @@ fn read_baseline_file() -> Result<HashMap<String, Vec<String>>, Error> {
 fn check_spelling_for_file(
     dictionary: &Vec<String>,
     baseline: &HashMap<String, Vec<String>>,
+    baseline_file: &String,
     all_misspelled_words: &mut Vec<Word>,
     file: &PathBuf,
     recursive: bool,
 ) -> Result<(), Error> {
     // Skip baseline file
-    if file.file_name().unwrap() == BASELINE_FILE {
+    if file.file_name().unwrap() == baseline_file.as_str() {
         return Ok(());
     }
 
@@ -150,6 +151,7 @@ fn check_spelling_for_file(
             check_spelling_for_file(
                 dictionary,
                 baseline,
+                baseline_file,
                 all_misspelled_words,
                 &sub_file?.path(),
                 recursive,
@@ -209,6 +211,10 @@ struct Args {
     #[arg(long = "baseline")]
     generate_baseline: bool,
 
+    /// Specifies which baseline file to use. Defaults to ./.wcheck-baseline
+    #[arg(short = 'b', long = "baseline-file", default_value_t = DEFAULT_BASELINE_FILE.to_string())]
+    baseline_file: String,
+
     /// Recursively search directories for files to check
     #[arg(short = 'r', long = "recursive")]
     recursive: bool,
@@ -235,7 +241,7 @@ fn main() {
     }
 
     let baseline: HashMap<String, Vec<String>>;
-    match read_baseline_file() {
+    match read_baseline_file(&args.baseline_file) {
         Ok(b) => baseline = b,
         Err(e) => {
             eprintln!("Failed to read baseline file: {}", e);
@@ -248,6 +254,7 @@ fn main() {
         if let Err(e) = check_spelling_for_file(
             &dictionary,
             &baseline,
+            &args.baseline_file,
             &mut all_misspelled_words,
             &file,
             args.recursive,
@@ -259,7 +266,7 @@ fn main() {
 
     if args.generate_baseline {
         println!("Generating baseline file");
-        if let Err(e) = generate_baseline(&all_misspelled_words) {
+        if let Err(e) = generate_baseline(&args.baseline_file, &all_misspelled_words) {
             eprintln!("Failed to generate baseline file: {}", e);
             exit(-3);
         }

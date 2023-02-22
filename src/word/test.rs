@@ -6,7 +6,7 @@ macro_rules! word_tests {
         #[test]
         fn $name() {
             let (dictionary, word, expected_result) = $state;
-            let test_word = Word { word, line_nr: 1};
+            let test_word = Word { word, file: PathBuf::from("Test_file"), line_nr: 1};
             assert_eq!(test_word.is_correct_spelling(&dictionary), expected_result)
         }
     )*
