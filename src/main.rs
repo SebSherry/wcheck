@@ -8,7 +8,7 @@ use regex::Regex;
 
 use std::collections::HashMap;
 use std::fs::{self, read_dir, OpenOptions};
-use std::io::{Error, Write};
+use std::io::{self, Error, Write};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
@@ -37,12 +37,28 @@ fn read_dictionary_file(dictionary: &mut Vec<String>, filename: &str) -> Result<
 }
 
 fn read_words_from_file(filename: &PathBuf) -> Result<Vec<Word>, Error> {
+    read_words_from_string(&fs::read_to_string(filename)?, Some(filename))
+}
+
+fn read_words_from_string(
+    content: &String,
+    filepath: Option<&PathBuf>,
+) -> Result<Vec<Word>, Error> {
     lazy_static! {
         static ref WORD_MATCH_RE: Regex = Regex::new("[a-zA-Z][a-zA-Z_\']*[a-zA-Z]").unwrap();
     }
     let mut word_list: Vec<Word> = Vec::new();
 
-    for (idx, line) in fs::read_to_string(filename)?.lines().enumerate() {
+    // If no file path is provided, assume the string is from stdin.
+    // Provide an empty PathBuf as we don't support baselines files
+    // when reading from stdin.
+
+    let filename = match filepath {
+        Some(path) => path.to_path_buf(),
+        None => PathBuf::new(),
+    };
+
+    for (idx, line) in content.lines().enumerate() {
         let line_words: Vec<&str> = line
             .split_whitespace()
             .filter(|w| WORD_MATCH_RE.is_match(w))
@@ -61,7 +77,7 @@ fn read_words_from_file(filename: &PathBuf) -> Result<Vec<Word>, Error> {
 
                     Word {
                         word,
-                        file: filename.to_path_buf(),
+                        file: filename.clone(),
                         line_nr: (idx + 1) as u32,
                     }
                 })
@@ -205,6 +221,38 @@ fn check_spelling_for_file_contents(
     all_misspelled_words
 }
 
+fn check_spelling_for_stdin(dictionary: &Vec<String>) -> Result<Vec<Word>, Error> {
+    let mut all_misspelled_words = Vec::new();
+
+    let file_contents: String = io::stdin()
+        .lines()
+        .map(|l| format!("{}\n", l.unwrap()))
+        .collect();
+
+    for word in read_words_from_string(&file_contents, None)? {
+        if let Err(misspelled_words) = word.is_correct_spelling(&dictionary) {
+            let is_multiple_words = word.is_camel_case() || word.is_snake_case();
+            for m_word in misspelled_words {
+                if is_multiple_words {
+                    println!(
+                        "Misspelled word on line {}: '\x1b[91m{}\x1b[0m' within '\x1b[93m{}\x1b[0m'",
+                        word.line_nr, m_word, word.word
+                    );
+                } else {
+                    println!(
+                        "Misspelled word on line {}: '\x1b[91m{}\x1b[0m'",
+                        word.line_nr, m_word
+                    );
+                }
+            }
+
+            all_misspelled_words.push(word.clone());
+        }
+    }
+
+    Ok(all_misspelled_words)
+}
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -217,15 +265,15 @@ struct Args {
     baseline_file: String,
 
     /// Recursively search directories for files to check
-    #[arg(short = 'r', long = "recursive")]
+    #[arg(short = 'r', long = "recursive", requires = "files")]
     recursive: bool,
 
     /// Use the american word list
     #[arg(short = 'A', long = "american")]
     american: bool,
 
-    /// Files to be spell checked
-    #[arg(required = true)]
+    /// Files to be checked. Uses STDIN if not provided
+    #[arg()]
     files: Vec<PathBuf>,
 }
 
@@ -251,35 +299,54 @@ fn main() {
         exit(-1);
     }
 
-    let baseline: HashMap<String, Vec<String>>;
-    match read_baseline_file(&args.baseline_file) {
-        Ok(b) => baseline = b,
-        Err(e) => {
-            eprintln!("Failed to read baseline file: {}", e);
-            exit(-1);
-        }
-    }
-
     let mut all_misspelled_words: Vec<Word> = Vec::new();
-    for file in args.files {
-        if let Err(e) = check_spelling_for_file(
-            &dictionary,
-            &baseline,
-            &args.baseline_file,
-            &mut all_misspelled_words,
-            &file,
-            args.recursive,
-        ) {
-            eprintln!("Failed to read file {}: {}", file.display(), e);
-            exit(-2);
+    if args.files.is_empty() {
+        // We do not support reading or writing baseline files when reading from STDIN
+        if args.generate_baseline {
+            eprintln!("WARNING: Not generating baseline as we're reading from STDIN");
         }
-    }
 
-    if args.generate_baseline {
-        println!("Generating baseline file");
-        if let Err(e) = generate_baseline(&args.baseline_file, &all_misspelled_words) {
-            eprintln!("Failed to generate baseline file: {}", e);
-            exit(-3);
+        if args.baseline_file != DEFAULT_BASELINE_FILE {
+            eprintln!("WARNING: Ignoring baseline file as we're reading from STDIN");
+        }
+
+        match check_spelling_for_stdin(&dictionary) {
+            Ok(misspelled_words) => all_misspelled_words = misspelled_words,
+            Err(e) => {
+                eprintln!("Failed to read from STDIN: {}", e);
+                exit(-2);
+            }
+        }
+    } else {
+        let baseline: HashMap<String, Vec<String>>;
+        match read_baseline_file(&args.baseline_file) {
+            Ok(b) => baseline = b,
+            Err(e) => {
+                eprintln!("Failed to read baseline file: {}", e);
+                exit(-1);
+            }
+        }
+
+        for file in args.files {
+            if let Err(e) = check_spelling_for_file(
+                &dictionary,
+                &baseline,
+                &args.baseline_file,
+                &mut all_misspelled_words,
+                &file,
+                args.recursive,
+            ) {
+                eprintln!("Failed to read file {}: {}", file.display(), e);
+                exit(-2);
+            }
+        }
+
+        if args.generate_baseline {
+            println!("Generating baseline file");
+            if let Err(e) = generate_baseline(&args.baseline_file, &all_misspelled_words) {
+                eprintln!("Failed to generate baseline file: {}", e);
+                exit(-3);
+            }
         }
     }
 
